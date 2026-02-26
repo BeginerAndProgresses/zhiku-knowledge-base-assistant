@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 from tools.ingestion import ingest_docs, delete_by_source_file
-from tools.query_db import query_vector_db, load_vector_db
+from tools.query_db import query_vector_db, load_vector_db, list_collections
 import tempfile
 
 # 设置页面标题和布局
@@ -21,22 +21,40 @@ with st.sidebar:
         accept_multiple_files=False  # 只接受单个文件
     )
     
-    # 集合名称输入
-    collection_name = st.text_input("集合名称", value="knowledge_base", help="用于区分不同的知识库集合")
+    # 选择或输入集合名称
+    collections = list_collections()
+    if collections is None:
+        collections = []
+    # select existing collection if any
+    if collections:
+        selected = st.selectbox("已存在的集合", options=collections)
+    else:
+        selected = None
+    # allow the user to override or type a new name
+    collection_name = st.text_input(
+        "集合名称", value=selected or "knowledge_base", help="用于区分不同的知识库集合"
+    )
+
+    # 如果切换了集合，则强制刷新文档列表状态
+    if st.session_state.get('last_collection') != collection_name:
+        st.session_state.last_collection = collection_name
+        st.session_state.refresh = True
     
     # 处理上传的文件
     if uploaded_file is not None:
-        # 保存上传的文件到临时位置
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
+        # 保存上传的文件到临时位置，但保留原始文件名
+        print(f"上传的文件名: {uploaded_file.name}")
+        original_filename = uploaded_file.name  # 保留原始文件名
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(original_filename)[1]) as tmp_file:
             tmp_file.write(uploaded_file.read())
             temp_path = tmp_file.name
         
         # 处理文档并添加到知识库
         if st.button("📤 添加到知识库", use_container_width=True):
             try:
-                with st.spinner(f"正在处理文档 {uploaded_file.name}..."):
-                    vectorstore = ingest_docs(temp_path, collection_name)
-                st.success(f"✅ 文档 {uploaded_file.name} 已成功添加到知识库!")
+                with st.spinner(f"正在处理文档 {original_filename}..."):
+                    vectorstore = ingest_docs(temp_path, collection_name, original_filename)
+                st.success(f"✅ 文档 {original_filename} 已成功添加到知识库!")
                 
                 # 显示一些统计信息
                 st.info(f"文档已添加到集合 '{collection_name}'")
@@ -50,27 +68,52 @@ with st.sidebar:
     
     # 文档删除功能
     st.header("🗑️ 删除文档")
-    
-    # 获取当前数据库中的文件列表（模拟）
-    if st.button("🔄 刷新文档列表", use_container_width=True):
-        # 这里我们模拟从数据库获取文件列表
+
+    # 刷新按钮会触发重新拉取唯一源文件列表
+    if 'refresh' not in st.session_state:
         st.session_state.refresh = True
-    
-    # 模拟的文件列表 - 在实际应用中，你需要从向量数据库中获取
-    # 这里暂时使用文本输入框让用户输入要删除的文件名
-    file_to_delete = st.text_input("输入要删除的文件名", placeholder="例如: example.pdf")
-    
-    if st.button("🗑️ 删除文档", use_container_width=True) and file_to_delete:
+    if 'file_list' not in st.session_state:
+        st.session_state.file_list = []
+
+    if st.button("🔄 刷新文档列表", use_container_width=True):
+        st.session_state.refresh = True
+
+    # 如果需要刷新或首次加载，就从向量数据库获取文件名列表
+    if st.session_state.refresh:
         try:
-            with st.spinner(f"正在删除文档 {file_to_delete}..."):
-                deleted_count = delete_by_source_file(file_to_delete, collection_name)
-            
-            if deleted_count > 0:
-                st.success(f"✅ 已从知识库中删除 {deleted_count} 个与 {file_to_delete} 相关的文档片段")
+            vectorstore = load_vector_db(collection_name)
+            if vectorstore:
+                all_docs = vectorstore.get()
+                unique_sources = sorted({
+                    m.get('source_file')
+                    for m in all_docs.get('metadatas', [])
+                    if m.get('source_file')
+                })
             else:
-                st.warning(f"⚠️ 未找到与 {file_to_delete} 相关的文档")
-        except Exception as e:
-            st.error(f"❌ 删除文档时出错: {str(e)}")
+                unique_sources = []
+        except Exception:
+            unique_sources = []
+
+        st.session_state.file_list = unique_sources
+        st.session_state.refresh = False
+
+    # 显示可供选择的文件名
+    if st.session_state.file_list:
+        selected_file = st.selectbox("请选择要删除的文档", st.session_state.file_list)
+        if st.button("🗑️ 删除选中文档", use_container_width=True):
+            try:
+                with st.spinner(f"正在删除文档 {selected_file} ..."):
+                    deleted_count = delete_by_source_file(selected_file, collection_name)
+                if deleted_count > 0:
+                    st.success(f"✅ 已从知识库中删除 {deleted_count} 个与 {selected_file} 相关的文档片段")
+                    # 刷新文件列表以反映变化
+                    st.session_state.refresh = True
+                else:
+                    st.warning(f"⚠️ 未找到与 {selected_file} 相关的文档")
+            except Exception as e:
+                st.error(f"❌ 删除文档时出错: {str(e)}")
+    else:
+        st.info("当前知识库中没有可用的文档，或请点击刷新按钮")
 
 # 主界面 - 问答功能
 st.header("💬 与知识库对话")

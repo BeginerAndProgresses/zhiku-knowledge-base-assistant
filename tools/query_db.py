@@ -6,6 +6,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 import logging
 
+# chromadb import for collection management
+import chromadb
+
 def load_vector_db(collection_name="knowledge_base"):
     """
     加载已存储的向量数据库
@@ -51,6 +54,17 @@ def query_vector_db(query_text, collection_name="knowledge_base", k=3):
         return similar_docs
     except Exception as e:
         print(f"查询数据库时出错: {e}")
+        return []
+
+
+def list_collections(persist_directory="./db_storage"):
+    """返回指定目录下的所有集合名称列表。"""
+    try:
+        client = chromadb.PersistentClient(path=persist_directory)
+        cols = client.list_collections()
+        return [c.name for c in cols]
+    except Exception as e:
+        print(f"列出集合时出错: {e}")
         return []
 
 

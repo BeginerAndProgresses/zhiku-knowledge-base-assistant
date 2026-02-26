@@ -9,11 +9,15 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 import shutil
 
-def ingest_docs(file_path, collection_name="knowledge_base"):
+def ingest_docs(file_path, collection_name="knowledge_base", source_filename=None):
     print(f"正在处理文档: {file_path}")
     if file_path.endswith('.pdf'):
         print("正在加载PDF文件...")
-        loader = PyPDFLoader(file_path)
+        try:
+            loader = PyPDFLoader(file_path)
+        except Exception as e:
+            print(f"加载PDF文件时出错: {e}")
+            raise
     elif file_path.endswith('.txt'):
         print("正在加载文本文件...")
         try :
@@ -24,10 +28,19 @@ def ingest_docs(file_path, collection_name="knowledge_base"):
             print(f"加载文本文件时出错: {e}")
     elif file_path.endswith('.docx'):
         print("正在加载Word文件...")
-        loader = Docx2txtLoader(file_path)
+        try:
+            loader = Docx2txtLoader(file_path)
+        except Exception as e:
+            print(f"加载Word文件时出错: {e}")
+            raise
     elif file_path.endswith('.md'):
         print("正在加载Markdown文件...")
-        loader = UnstructuredMarkdownLoader(file_path)
+        
+        try:
+            loader = UnstructuredMarkdownLoader(file_path)
+        except Exception as e:
+            print(f"加载Markdown文件时出错: {e}")
+            raise
     else:
         raise ValueError(f"Unsupported file type: {file_path}")
     print(f"已加载 {len(loader.load())} 个文档片段")
@@ -36,7 +49,8 @@ def ingest_docs(file_path, collection_name="knowledge_base"):
     docs = text_splitter.split_documents(documents)
     
     # 为每个文档添加源文件元数据，使用完整的文件名
-    source_filename = os.path.basename(file_path)  # 提取文件名
+    source_filename = source_filename or os.path.basename(file_path)  # 提取文件名
+    print(f"为文档片段添加源文件元数据: {source_filename}")
     for doc in docs:
         doc.metadata['source_file'] = source_filename  # 使用完整的文件名而不是路径
     
@@ -183,3 +197,6 @@ def delete_by_source_file(source_file, collection_name="knowledge_base", persist
     print(f"集合 '{collection_name}' 中剩余 {count} 个文档")
     
     return len(doc_ids)
+
+if __name__ == "__main__":
+    reset_full_database()
