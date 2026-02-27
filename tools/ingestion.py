@@ -45,7 +45,7 @@ def ingest_docs(file_path, collection_name="knowledge_base", source_filename=Non
         raise ValueError(f"Unsupported file type: {file_path}")
     print(f"已加载 {len(loader.load())} 个文档片段")
     documents = loader.load()
-    text_splitter = CharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     docs = text_splitter.split_documents(documents)
     
     # 为每个文档添加源文件元数据，使用完整的文件名

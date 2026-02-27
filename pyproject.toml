@@ -18,4 +18,7 @@ dependencies = [
     "streamlit>=1.54.0",
     "unstructured>=0.21.5",
     "markdown>=3.10.2",
+    "langchain-openai>=1.1.10",
+    "langchain-tavily>=0.2.17",
+    "tavily>=1.1.0",
 ]

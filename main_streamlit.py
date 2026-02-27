@@ -3,6 +3,10 @@ import os
 from tools.ingestion import ingest_docs, delete_by_source_file
 from tools.query_db import query_vector_db, load_vector_db, list_collections
 import tempfile
+from langchain_core.messages import HumanMessage
+
+from tools.agent import run_conversation
+
 
 # 设置页面标题和布局
 st.set_page_config(page_title="个人知识库管理助手", layout="wide")
@@ -127,23 +131,8 @@ if st.button("🔍 查询", use_container_width=True):
         with st.spinner("正在查询知识库..."):
             try:
                 # 使用现有函数查询知识库
-                similar_docs = query_vector_db(question, collection_name)
-                
-                if similar_docs:
-                    # 组织答案
-                    response = f"根据知识库中的信息，为您找到以下相关内容：\n\n"
-                    for i, doc in enumerate(similar_docs, 1):
-                        content = doc.page_content.replace('\n', ' ')[:500]  # 限制长度
-                        response += f"**相关段落 {i}:**\n{content}...\n\n"
-                        
-                        # 显示来源信息
-                        source = doc.metadata.get('source', 'Unknown')
-                        if 'source_file' in doc.metadata:
-                            source = doc.metadata['source_file']
-                        response += f"*来源: {source}*\n\n"
-                else:
-                    response = "抱歉，未能在知识库中找到与您问题相关的内容。请尝试其他问题或添加更多文档到知识库中。"
-                
+                agent_question = f"根据在{collection_name}知识库中查询到的信息，回答以下问题：{question}"
+                response = run_conversation(agent_question)
                 # 显示答案
                 st.subheader("🤖 回答:")
                 st.write(response)
